@@ -143,5 +143,5 @@
 (comment
 
   ;; run with
-  ;; > clj -X updater/update-references :dir '"/path/to/terraform-stack-root"'
+  ;; > clojure -X updater/update-references :dir '"/path/to/terraform-stack-root"'
   )
