@@ -108,7 +108,10 @@
           tags)))
 
 (defn update-references
-  [dir]
+  [{:keys [dir]}]
+  (when-not dir
+    (println "please specify the dir option")
+    (System/exit -1))
   (let [->module-id
         #(select-keys % [:account :repository])
 
@@ -117,11 +120,11 @@
 
         module-id->available-tags
         (->> (vals file-path->contents-and-module-refs)
-               (map :referenced-modules)
-               (apply concat)
-               set
-               (map (fn [module] [(->module-id module) (find-available-module-tags module)]))
-               (into {}))]
+             (map :referenced-modules)
+             (apply concat)
+             set
+             (map (fn [module] [(->module-id module) (find-available-module-tags module)]))
+             (into {}))]
 
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
       (let [updated-contents (reduce
@@ -136,3 +139,9 @@
                                (:referenced-modules contents-and-module-refs))]
         (when (not= (:contents contents-and-module-refs) updated-contents)
           (spit file-path updated-contents))))))
+
+(comment
+
+  ;; run with
+  ;; > clj -X updater/update-references :dir '"/path/to/terraform-stack-root"'
+  )
