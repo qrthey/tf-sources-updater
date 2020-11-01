@@ -92,8 +92,12 @@
                                                        :repository (nth parts 2)
                                                        :tag (parse-tag (nth parts 3))})))
                                              set)})])))
+                           (filter #(seq (:referenced-modules (second %))))
                            (into {}))]
-    (into {} (filter #(seq (:referenced-modules (val %))) file->modules))))
+    (println "found " (count (set (apply concat (map :referenced-modules (vals file->modules))))) " modules "
+             "across " (count file->modules) " files with module references.")
+    (flush)
+    file->modules))
 
 (defn find-available-module-tags
   [{:keys [account repository oauth-token] :or {oauth-token (System/getenv "GITHUB_TOKEN_ICE")}}]
@@ -118,14 +122,20 @@
         file-path->contents-and-module-refs
         (find-terraform-files-with-module-references dir)
 
+        _ (do (print "loading module tags from github: ") (flush))
+        
         module-id->available-tags
         (->> (vals file-path->contents-and-module-refs)
              (map :referenced-modules)
              (apply concat)
              set
-             (map (fn [module] [(->module-id module) (find-available-module-tags module)]))
+             (map (fn [module]
+                    (print ".")
+                    (flush)
+                    [(->module-id module) (find-available-module-tags module)]))
              (into {}))]
-
+    (println)
+    (println "patching files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
       (let [updated-contents (reduce
                                (fn [acc module]
@@ -138,6 +148,7 @@
                                (:contents contents-and-module-refs)
                                (:referenced-modules contents-and-module-refs))]
         (when (not= (:contents contents-and-module-refs) updated-contents)
+          (println "- writing " file-path)
           (spit file-path updated-contents))))))
 
 (comment
