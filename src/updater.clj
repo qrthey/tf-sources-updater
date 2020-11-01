@@ -3,10 +3,47 @@
             [cheshire.core :as json]
             [clj-http.client :as http-client]))
 
-#_(require '[clojure.java.shell :as shell])
-#_(shell/sh "pwd")
+(defn parse-tag
+  "Takes a tag of the following form
 
-(defn update-module-sources
+    /PREFIX//MAJOR/./MINOR/./PATCH//-rcRC/
+
+  The prefix can be an empty string and the last part starting with
+  -rc is optional. Returns a map containing the original unparsed-tag,
+  and the parts described. Prefix is kept as is, while the other parts
+  are parsed to integers.
+
+  Examples of tags:
+
+  v2.13.3   ;; no rc value
+  => {:unparsed-tag \"v2.13.3\"
+      :prefix \"v\"
+      :major 2
+      :minor 13
+      :patch 3}
+
+
+  v12.1.33-rc14
+  => {:unparsed-tag \"v12.1.33-rc14\"
+      :prefix \"v\"
+      :major 12
+      :minor 1
+      :patch 33
+      :rc 14}
+  "
+  [tag]
+  (let [nth-int #(Integer/parseInt (nth %1 %2))
+        re-prefix-major-minor-patch-rc #"([^\d]*)(\d+)\.(\d+)\.(\d+)(-rc\d+)?"
+        parts (re-find re-prefix-major-minor-patch-rc tag)
+        parsed {:unparsed-tag tag
+                :prefix (nth parts 1)
+                :major (nth-int parts 2)
+                :minor (nth-int parts 3)
+                :patch (nth-int parts 4)}]
+    (conj parsed (when-let [rc-str (nth parts 5)]
+                   [:rc (nth-int (re-find #"-rc(\d+)" rc-str) 1)]))))
+
+(defn find-module-sources
   [dir]
   (let [terraform-files
         (->> (file-seq (clojure.java.io/file dir))
@@ -20,20 +57,18 @@
                          set
                          sort
                          (map (fn [url]
-                                {:module-github-url (subs url 0 (str/index-of url "?"))
+                                {:url url
+                                 :module-github-url (subs url 0 (str/index-of url "?"))
                                  :version (mapv #(Integer/parseInt %) (rest (re-find #"v(\d+)\.(\d+)\.(\d+)" url)))})))]
-    (println "module sources:\n")
-    (doseq [github-ref github-refs]
-      (println (str "- module source '" (:module-github-url github-ref) "'"
-                    "\n  - current version: " (str/join "." (:version github-ref)) "\n")))))
+    github-refs))
 
 (defn get-available-tag-versions
-  [{:keys [account repository]}]
+  [{:keys [account repository oauth-token] :or {oauth-token (System/getenv "GITHUB_TOKEN_ICE")}}]
   (let [nth-int #(Integer/parseInt (nth %1 %2))
         tags (-> (str "https://api.github.com/repos/" account "/" repository "/git/refs/tags")
                  (http-client/get
-                   (when-let [oath-token (System/getenv "GITHUB_TOKEN_ICE")]
-                     {:headers {"Authorization" (str "token " oath-token)}}))
+                   (when oauth-token
+                     {:headers {"Authorization" (str "token " oauth-token)}}))
                  :body
                  (json/parse-string keyword))
 
@@ -61,7 +96,7 @@
                (get-available-tag-versions
                  {:account "skm-ice"
                   :repository "terraform-stack-team-iceout"}))))
-  
+
   ;; a shell script
   ;; curl -H "Authorization: token OAUTH-TOKEN" https://api.github.com/repos/skm-ice/terraform-stack-team-iceout/git/refs/tags
 
@@ -81,4 +116,10 @@
   ;;   - main-version
   ;;   - minor version
   ;;   - patch version
+
+
+  #_(require '[clojure.java.shell :as shell])
+  #_(shell/sh "pwd")
+
+
   )
