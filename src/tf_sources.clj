@@ -1,4 +1,4 @@
-(ns updater
+(ns tf-sources
   (:require [clojure.string :as str]
             [cheshire.core :as json]
             [clj-http.client :as http-client]))
@@ -94,17 +94,14 @@
                                              set)})])))
                            (filter #(seq (:referenced-modules (second %))))
                            (into {}))]
-    (println "found " (count (set (apply concat (map :referenced-modules (vals file->modules))))) " modules "
-             "across " (count file->modules) " files with module references.")
-    (flush)
     file->modules))
 
 (defn find-available-module-tags
-  [{:keys [account repository oauth-token] :or {oauth-token (System/getenv "GITHUB_TOKEN_ICE")}}]
+  [{:keys [account repository]}]
   (let [nth-int #(Integer/parseInt (nth %1 %2))
         tags (-> (str "https://api.github.com/repos/" account "/" repository "/git/refs/tags")
                  (http-client/get
-                   (when oauth-token
+                   (when-let [oauth-token (System/getenv "GITHUB_TOKEN_ICE")]
                      {:headers {"Authorization" (str "token " oauth-token)}}))
                  :body
                  (json/parse-string keyword))]
@@ -122,20 +119,28 @@
         file-path->contents-and-module-refs
         (find-terraform-files-with-module-references dir)
 
-        _ (do (print "loading module tags from github: ") (flush))
-        
-        module-id->available-tags
+        unique-module-ids
         (->> (vals file-path->contents-and-module-refs)
              (map :referenced-modules)
              (apply concat)
-             set
-             (map (fn [module]
+             (map ->module-id)
+             set)
+
+        _ (do
+            (println "* found " (count unique-module-ids) " referenced module repositories"
+                     " across " (count file-path->contents-and-module-refs)
+                     " files with module references")
+            (print "* loading module tags from github: ") (flush))
+        
+        module-id->available-tags
+        (->> unique-module-ids
+             (map (fn [module-id]
                     (print ".")
                     (flush)
-                    [(->module-id module) (find-available-module-tags module)]))
+                    [module-id (find-available-module-tags module-id)]))
              (into {}))]
     (println)
-    (println "patching files:")
+    (println "* patching files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
       (let [updated-contents (reduce
                                (fn [acc module]
@@ -148,11 +153,12 @@
                                (:contents contents-and-module-refs)
                                (:referenced-modules contents-and-module-refs))]
         (when (not= (:contents contents-and-module-refs) updated-contents)
-          (println "- writing " file-path)
-          (spit file-path updated-contents))))))
+          (println "  - writing " file-path)
+          (spit file-path updated-contents))))
+    (println "* done")))
 
 (comment
 
   ;; run with
-  ;; > clojure -X updater/update-references :dir '"/path/to/terraform-stack-root"'
+  ;; > clojure -X tf-sources/update-references :dir '"/path/to/terraform-stack-root"'
   )
