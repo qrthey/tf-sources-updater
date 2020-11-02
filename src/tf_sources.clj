@@ -127,9 +127,9 @@
              set)
 
         _ (do
-            (println "* found " (count unique-module-ids) " referenced module repositories"
-                     " across " (count file-path->contents-and-module-refs)
-                     " files with module references")
+            (println (str "* found " (count unique-module-ids) " referenced module repositories"
+                          " across " (count file-path->contents-and-module-refs)
+                          " files with module references"))
             (print "* loading module tags from github: ") (flush))
         
         module-id->available-tags
@@ -153,6 +153,6 @@
                                (:contents contents-and-module-refs)
                                (:referenced-modules contents-and-module-refs))]
         (when (not= (:contents contents-and-module-refs) updated-contents)
-          (println "  - writing " file-path)
+          (println (str "  - writing " file-path))
           (spit file-path updated-contents))))
     (println "* done")))
