@@ -55,48 +55,51 @@
                                    1))]))))
 
 (defn find-terraform-files-with-module-references
+  "Returns a map of file-path to maps of file content and referenced
+  modules."
   [dir]
   (let [terraform-files
         (->> (file-seq (clojure.java.io/file dir))
              (map #(.getPath %))
              (filter #(and (not (str/includes? % ".terraform"))
                            (not (str/includes? % ".git"))
-                           (str/ends-with? % ".tf"))))
+                           (str/ends-with? % ".tf"))))]
+    (->> terraform-files
+         (map (fn [terraform-file]
+                (let [re-github-within-parenthesis
+                      #"\"([^\"]*github[^\"]*)\""
 
-        file->modules (->> terraform-files
-                           (map (fn [terraform-file]
-                                  (let [re-github-within-parenthesis
-                                        #"\"([^\"]*github[^\"]*)\""
+                      find-github-urls
+                      #(->> %
+                            (re-seq re-github-within-parenthesis)
+                            (map second)
+                            set)
 
-                                        find-github-urls
-                                        #(->> %
-                                              (re-seq re-github-within-parenthesis)
-                                              (map second)
-                                              set)]
-                                    [terraform-file
-                                     (let [contents (slurp terraform-file)]
-                                       {:contents
-                                        contents
+                      contents
+                      (slurp terraform-file)
 
-                                        :referenced-modules
-                                        (->> contents
-                                             find-github-urls
-                                             (map (fn [github-url]
-                                                    (let [re-account-repository-reference
-                                                          #"github.com:([^/]+)/([^.?]+).*\?ref=(.*)"
+                      referenced-modules
+                      (->> contents
+                           find-github-urls
+                           (map (fn [github-url]
+                                  (let [re-account-repository-reference
+                                        #"github.com:([^/]+)/([^.?]+).*\?ref=(.*)"
 
-                                                          parts
-                                                          (re-find re-account-repository-reference github-url)]
-                                                      {:original-github-url github-url
-                                                       :account (nth parts 1)
-                                                       :repository (nth parts 2)
-                                                       :tag (parse-tag (nth parts 3))})))
-                                             set)})])))
-                           (filter #(seq (:referenced-modules (second %))))
-                           (into {}))]
-    file->modules))
+                                        parts
+                                        (re-find re-account-repository-reference github-url)]
+                                    {:original-github-url github-url
+                                     :account (nth parts 1)
+                                     :repository (nth parts 2)
+                                     :tag (parse-tag (nth parts 3))})))
+                           set)]
+                  [terraform-file {:contents contents
+                                   :referenced-modules referenced-modules}])))
+         (filter #(seq (:referenced-modules (second %))))
+         (into {}))))
 
 (defn find-available-module-tags
+  "Returns a vector of tag data retrieved from the specified github
+  account/repository."
   [{:keys [account repository]}]
   (let [nth-int #(Integer/parseInt (nth %1 %2))
         tags (-> (str "https://api.github.com/repos/" account "/" repository "/git/refs/tags")
@@ -109,6 +112,8 @@
           tags)))
 
 (defn update-references
+  "Patches all github urls used as sources in .tf files under dir with
+  updated tag versions."
   [{:keys [dir]}]
   (when-not dir
     (println "please specify the dir option")
