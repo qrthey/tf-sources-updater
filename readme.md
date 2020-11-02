@@ -22,6 +22,11 @@ updater against a terraform project that is in a clean git status.
 This way, you can easily check the changes performed by the updater
 and catch potential errors.
 
+Also, a newer release of a module might not be backwards compatible
+and might require other changes in the repository using the module. It
+is advised to review the changelog of the modules that are updated to
+a newer version.
+
 ## Access to tags from private repositories
 Make sure that you have access to download the tag information from
 the github repositories. If an environmental variable `GITHUB_TOKEN`
