@@ -101,7 +101,7 @@
   (let [nth-int #(Integer/parseInt (nth %1 %2))
         tags (-> (str "https://api.github.com/repos/" account "/" repository "/git/refs/tags")
                  (http-client/get
-                   (when-let [oauth-token (System/getenv "GITHUB_TOKEN_ICE")]
+                   (when-let [oauth-token (System/getenv "GITHUB_TOKEN")]
                      {:headers {"Authorization" (str "token " oauth-token)}}))
                  :body
                  (json/parse-string keyword))]
@@ -156,9 +156,3 @@
           (println "  - writing " file-path)
           (spit file-path updated-contents))))
     (println "* done")))
-
-(comment
-
-  ;; run with
-  ;; > clojure -X tf-sources/update-references :dir '"/path/to/terraform-stack-root"'
-  )
