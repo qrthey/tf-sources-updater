@@ -142,8 +142,7 @@
     (catch Exception exc
       (throw (Exception. (str "\n\nCould not fetch tags for " account "/" repository ". "
                               "Perhaps the repository doesn't exist, or you don't have access to it. "
-                              "This can be related to a wrong or missing GITHUB_TOKEN environment variable.")))))
-  )
+                              "This can be related to a wrong or missing GITHUB_TOKEN environment variable."))))))
 
 (defn update-references
   "Patches all github urls used as sources in .tf files under dir with
@@ -170,7 +169,7 @@
                           " across " (count file-path->contents-and-module-refs)
                           " files with module references"))
             (print "* loading module tags from github: ") (flush))
-        
+
         module-id->available-tags
         (->> unique-module-ids
              (map (fn [module-id]
