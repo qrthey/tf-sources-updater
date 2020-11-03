@@ -186,7 +186,7 @@
                        (fn [orig-tag available-tags]
                          (max-tag (:major orig-tag) available-tags))} strategy)]
     (println)
-    (println "* patching files:")
+    (println "* patched files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
       (let [updated-contents (reduce
                                (fn [acc referenced-module]
@@ -206,6 +206,6 @@
                                (:contents contents-and-module-refs)
                                (:referenced-modules contents-and-module-refs))]
         (when (not= (:contents contents-and-module-refs) updated-contents)
-          (println (str "  - writing " file-path))
-          (spit file-path updated-contents))))
+          (spit file-path updated-contents)
+          (println (str "  - " file-path)))))
     (println "* done")))
