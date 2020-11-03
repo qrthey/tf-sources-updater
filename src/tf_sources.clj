@@ -43,17 +43,35 @@
         without-rc (reduce
                      (fn [acc [key idx]]
                        (if-let [v-str (nth parts idx)]
-                         (assoc acc key (Integer/parseInt v-str))
+                         (assoc acc key (Long/parseLong v-str))
                          acc))
                      {:unparsed-tag tag
                       :prefix (nth parts 1)}
                      part->idx)]
 
     (conj without-rc (when-let [rc-str (nth parts 5)]
-                       [:rc (Integer/parseInt
+                       [:rc (Long/parseLong
                               (nth (re-find #"-rc(\d+)" rc-str)
                                    1))]))))
 
+(def ->sortable-tag
+  "Creates a sortable representation of a parsed tag value."
+  (juxt #(get % :major 0)
+        #(get % :minor 0)
+        #(get % :patch 0)
+        #(if-let [rc (:rc %)]
+           (+ Long/MIN_VALUE rc)
+           0)))
+
+(defn max-tag
+  "Returns the tag within the parsed-tags collection with the highest
+  semantic version. If the optional for-major is specified, the tag
+  with the highest semantic version with that :major value within
+  parsed-tags is returned."
+  ([parsed-tags]
+   (last (sort-by ->sortable-tag parsed-tags)))
+  ([for-major parsed-tags]
+   (max-tag (filter #(= for-major (:major %)) parsed-tags))))
 
 (defn find-relevant-terraform-file-paths
   "Recursively find .tf files that are not hidden, and that are not
