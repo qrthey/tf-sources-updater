@@ -112,8 +112,9 @@
       (mapv #(parse-tag (subs (:ref %) (count "refs/tags/")))
             tags))
     (catch Exception exc
-      (println (str "could not fetch tags for " account "/" repository))
-      (throw exc)))
+      (throw (Exception. (str "\n\nCould not fetch tags for " account "/" repository ". "
+                              "Perhaps the repository doesn't exist, or you don't have access to it. "
+                              "This can be related to a wrong or missing GITHUB_TOKEN environment variable.")))))
   )
 
 (defn update-references
