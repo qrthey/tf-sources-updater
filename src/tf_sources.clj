@@ -54,48 +54,58 @@
                               (nth (re-find #"-rc(\d+)" rc-str)
                                    1))]))))
 
+
+(defn find-relevant-terraform-file-paths
+  "Recursively find .tf files that are not hidden, and that are not
+  contained under hidden folders."
+  [dir]
+  (let [dir (java.io.File. dir)
+        files (file-seq dir)
+        file-paths (set (map #(.getPath %) files))
+        hidden-files (filter #(.isHidden %) files)
+        hidden-files-paths (set (map #(.getPath %) hidden-files))]
+    (filter
+      (fn [path]
+        (and (str/ends-with? path ".tf")
+             (not-any? #(str/starts-with? path %) hidden-files-paths)))
+      file-paths)))
+
 (defn find-terraform-files-with-module-references
   "Returns a map of file-path to maps of file content and referenced
   modules."
   [dir]
-  (let [terraform-files
-        (->> (file-seq (clojure.java.io/file dir))
-             (map #(.getPath %))
-             (filter #(and (not (str/includes? % ".terraform"))
-                           (not (str/includes? % ".git"))
-                           (str/ends-with? % ".tf"))))]
-    (->> terraform-files
-         (map (fn [terraform-file]
-                (let [re-github-within-parenthesis
-                      #"\"([^\s\"]*github[^\"]*)\""
+  (->> (find-relevant-terraform-file-paths dir)
+       (map (fn [terraform-file]
+              (let [re-github-within-parenthesis
+                    #"\"([^\s\"]*github[^\"]*)\""
 
-                      find-github-urls
-                      #(->> %
-                            (re-seq re-github-within-parenthesis)
-                            (map second)
-                            set)
+                    find-github-urls
+                    #(->> %
+                          (re-seq re-github-within-parenthesis)
+                          (map second)
+                          set)
 
-                      contents
-                      (slurp terraform-file)
+                    contents
+                    (slurp terraform-file)
 
-                      referenced-modules
-                      (->> contents
-                           find-github-urls
-                           (map (fn [github-url]
-                                  (let [re-account-repository-reference
-                                        #"github.com:([^/]+)/([^.?/]+).*\?ref=(.*)"
+                    referenced-modules
+                    (->> contents
+                         find-github-urls
+                         (map (fn [github-url]
+                                (let [re-account-repository-reference
+                                      #"github.com:([^/]+)/([^.?/]+).*\?ref=(.*)"
 
-                                        parts
-                                        (re-find re-account-repository-reference github-url)]
-                                    {:original-github-url github-url
-                                     :account (nth parts 1)
-                                     :repository (nth parts 2)
-                                     :tag (parse-tag (nth parts 3))})))
-                           set)]
-                  [terraform-file {:contents contents
-                                   :referenced-modules referenced-modules}])))
-         (filter #(seq (:referenced-modules (second %))))
-         (into {}))))
+                                      parts
+                                      (re-find re-account-repository-reference github-url)]
+                                  {:original-github-url github-url
+                                   :account (nth parts 1)
+                                   :repository (nth parts 2)
+                                   :tag (parse-tag (nth parts 3))})))
+                         set)]
+                [terraform-file {:contents contents
+                                 :referenced-modules referenced-modules}])))
+       (filter #(seq (:referenced-modules (second %))))
+       (into {})))
 
 (defn find-available-module-tags
   "Returns a vector of tag data retrieved from the specified github
