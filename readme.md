@@ -49,6 +49,13 @@ The clojure -X invocation needs parsable args. For the path to the
 terraform projects root directory to be readable, clojure must receive
 it as a string (surrounded with parenthesis).
 
+An optional :strategy switch can be given. It can be either
+:highest-semver or :highest-semver-for-major. The latter meaning that
+upgrading of tags vil only be done within their current major version.
+If the switch isn't passed it defaults to :highest-semver. Eg:
+
+    $ clojure -X tf-sources/update-references :dir '"/path/to/terraform-stack-root"' :strategy :highest-semver-for-major
+
 The program will print some information about its workings and quit.
 Go check the terraform projects git status to see details about
 potential changes.

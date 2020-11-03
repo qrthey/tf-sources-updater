@@ -147,7 +147,7 @@
 (defn update-references
   "Patches all github urls used as sources in .tf files under dir with
   updated tag versions."
-  [{:keys [dir]}]
+  [{:keys [dir strategy] :or {strategy :highest-semver}}]
   (when-not dir
     (println "please specify the dir option")
     (System/exit -1))
@@ -176,18 +176,33 @@
                     (print ".")
                     (flush)
                     [module-id (find-available-module-tags module-id)]))
-             (into {}))]
+             (into {}))
+
+        tag-selector ({:highest-semver
+                       (fn [orig-tag available-tags]
+                         (max-tag available-tags))
+
+                       :highest-semver-for-major
+                       (fn [orig-tag available-tags]
+                         (max-tag (:major orig-tag) available-tags))} strategy)]
     (println)
     (println "* patching files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
       (let [updated-contents (reduce
-                               (fn [acc module]
-                                 (str/replace acc
-                                              (:original-github-url module)
-                                              (str/replace (:original-github-url module)
-                                                           (:unparsed-tag (:tag module))
-                                                           (:unparsed-tag (last (get module-id->available-tags
-                                                                                     (->module-id module)))))))
+                               (fn [acc referenced-module]
+                                 (let [module-id (->module-id referenced-module)
+                                       orig-url (:original-github-url referenced-module)
+                                       orig-url-tag (:tag referenced-module)
+                                       new-url-tag (let [known-tags (module-id->available-tags module-id)]
+                                                     (if (some #(= (:unparsed-tag orig-url-tag) %)
+                                                               (map :unparsed-tag known-tags))
+                                                       (tag-selector orig-url-tag known-tags)
+                                                       orig-url-tag))]
+                                   (str/replace acc
+                                                orig-url
+                                                (str/replace orig-url
+                                                             (:unparsed-tag orig-url-tag)
+                                                             (:unparsed-tag new-url-tag)))))
                                (:contents contents-and-module-refs)
                                (:referenced-modules contents-and-module-refs))]
         (when (not= (:contents contents-and-module-refs) updated-contents)
