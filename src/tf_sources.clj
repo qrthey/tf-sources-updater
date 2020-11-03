@@ -67,7 +67,7 @@
     (->> terraform-files
          (map (fn [terraform-file]
                 (let [re-github-within-parenthesis
-                      #"\"([^\"]*github[^\"]*)\""
+                      #"\"([^\s\"]*github[^\"]*)\""
 
                       find-github-urls
                       #(->> %
@@ -83,7 +83,7 @@
                            find-github-urls
                            (map (fn [github-url]
                                   (let [re-account-repository-reference
-                                        #"github.com:([^/]+)/([^.?]+).*\?ref=(.*)"
+                                        #"github.com:([^/]+)/([^.?/]+).*\?ref=(.*)"
 
                                         parts
                                         (re-find re-account-repository-reference github-url)]
@@ -101,15 +101,20 @@
   "Returns a vector of tag data retrieved from the specified github
   account/repository."
   [{:keys [account repository]}]
-  (let [nth-int #(Integer/parseInt (nth %1 %2))
-        tags (-> (str "https://api.github.com/repos/" account "/" repository "/git/refs/tags")
-                 (http-client/get
-                   (when-let [oauth-token (System/getenv "GITHUB_TOKEN")]
-                     {:headers {"Authorization" (str "token " oauth-token)}}))
-                 :body
-                 (json/parse-string keyword))]
-    (mapv #(parse-tag (subs (:ref %) (count "refs/tags/")))
-          tags)))
+  (try
+    (let [nth-int #(Integer/parseInt (nth %1 %2))
+          tags (-> (str "https://api.github.com/repos/" account "/" repository "/git/refs/tags")
+                   (http-client/get
+                     (when-let [oauth-token (System/getenv "GITHUB_TOKEN")]
+                       {:headers {"Authorization" (str "token " oauth-token)}}))
+                   :body
+                   (json/parse-string keyword))]
+      (mapv #(parse-tag (subs (:ref %) (count "refs/tags/")))
+            tags))
+    (catch Exception exc
+      (println (str "could not fetch tags for " account "/" repository))
+      (throw exc)))
+  )
 
 (defn update-references
   "Patches all github urls used as sources in .tf files under dir with
