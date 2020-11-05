@@ -150,9 +150,15 @@
   "Patches all github urls used as sources in .tf files under dir with
   updated tag versions."
   [{:keys [dir strategy] :or {strategy :highest-semver}}]
+
   (when-not dir
     (println "please specify the dir option")
     (System/exit -1))
+
+  (when-not (#{:highest-semver :highest-semver-current-major} strategy)
+    (println "unkown strategy: " strategy)
+    (System/exit -1))
+
   (let [->module-id
         #(select-keys % [:account :repository])
 
