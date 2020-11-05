@@ -13,7 +13,6 @@ sketches the algorithm to do so.
 4. Replace all tags in all files with the newest version. If the
    content of a file changes during this step, write it to disk.
 
-
 # Usage
 
 ## Caution
