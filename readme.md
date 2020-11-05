@@ -17,15 +17,19 @@ sketches the algorithm to do so.
 # Usage
 
 ## Caution
-This software is fresh, and therefor not time-tested. Ideally, run the
-updater against a terraform project that is in a clean git status.
-This way, you can easily check the changes performed by the updater
-and catch potential errors.
+This software can override terraform files on disk. Ideally, run the
+updater against a terraform project that is under source control and
+in a clean state. This way, you can easily check the changes performed
+by the updater and catch potential errors, before comitting some of
+the proposed changes.
 
-Also, a newer release of a module might not be backwards compatible
-and might require other changes in the repository using the module. It
-is advised to review the changelog of the modules that are updated to
-a newer version.
+A newer release of a module might not be backwards compatible and
+might require other changes in the repository using the module. It is
+advised to review the changelog of the modules that are updated to a
+newer version. Especially when a proposed change updates the major
+version of a reference. The tool can be run in a mode where no
+upgrades outside of the current major version are performed. See more
+below under 'Running the updater'.
 
 ## Access to tags from private repositories
 Make sure that you have access to download the tag information from
@@ -36,12 +40,13 @@ settings -> Personal access tokens. When generating a new token,
 ensure 'repo' root scope is selected to get API access to private
 repositories that your account has access to.
 
-The updater will atm crash with a 404 exception received from githubs
-API when you try to fetch tags for a hidden repository that you fail
-to authenticate for.
+If the tool receives an error from the github API it will report to
+standard out which account/repository failed, after which execution
+stops.
 
 ## Running the updater
-Use the following shell command.
+Use the following shell command to update all referenced github urls
+with a tag to the latest tag for the repository.
 
     $ clojure -X tf-sources/update-references :dir '"/path/to/terraform-stack-root"'
 
@@ -49,13 +54,15 @@ The clojure -X invocation needs parsable args. For the path to the
 terraform projects root directory to be readable, clojure must receive
 it as a string (surrounded with parenthesis).
 
-An optional :strategy switch can be given. It can be either
-:highest-semver or :highest-semver-for-major. The latter meaning that
-upgrading of tags vil only be done within their current major version.
-If the switch isn't passed it defaults to :highest-semver. Eg:
+The program will print some information about its workings, for
+example the paths to files that were writen with updates, and quit. If
+the target terraform project is under source control, you can now
+inspect proposed changes and commit the desired ones.
 
-    $ clojure -X tf-sources/update-references :dir '"/path/to/terraform-stack-root"' :strategy :highest-semver-for-major
+An optional :strategy switch can be passed. Its possible values are
+:highest-semver, which is the default value if no :strategy is
+specified, and :highest-semver-current-major. The latter meaning that
+upgrading of tags will only be done within their current major
+version. For example:
 
-The program will print some information about its workings and quit.
-Go check the terraform projects git status to see details about
-potential changes.
+    $ clojure -X tf-sources/update-references :dir '"/path/to/terraform-stack-root"' :strategy :highest-semver-current-major

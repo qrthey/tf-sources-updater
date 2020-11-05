@@ -88,44 +88,46 @@
              (not-any? #(str/starts-with? path %) hidden-files-paths)))
       file-paths)))
 
+(defn find-referenced-modules
+  "Finds github urls within parenthesis in the file-content, was is a
+  string. Returns a set of parsed urls. Each parsed url is a map
+  describing the github account, repository and tag information."
+  [file-content]
+  (let [re-github-within-parenthesis
+        #"\"([^\s\"]*github[^\"]*)\""
+
+        find-github-urls
+        #(->> %
+              (re-seq re-github-within-parenthesis)
+              (map second)
+              set)]
+    (->> (find-github-urls file-content)
+         (map (fn [github-url]
+                (let [re-account-repository-reference
+                      #"github.com:([^/]+)/([^.?/]+).*\?ref=(.*)"
+
+                      parts
+                      (re-find re-account-repository-reference github-url)]
+                  {:original-github-url github-url
+                   :account (nth parts 1)
+                   :repository (nth parts 2)
+                   :tag (parse-tag (nth parts 3))})))
+         set)))
+
 (defn find-terraform-files-with-module-references
   "Returns a map of file-path to maps of file content and referenced
   modules."
   [dir]
   (->> (find-relevant-terraform-file-paths dir)
        (map (fn [terraform-file]
-              (let [re-github-within-parenthesis
-                    #"\"([^\s\"]*github[^\"]*)\""
-
-                    find-github-urls
-                    #(->> %
-                          (re-seq re-github-within-parenthesis)
-                          (map second)
-                          set)
-
-                    contents
-                    (slurp terraform-file)
-
-                    referenced-modules
-                    (->> contents
-                         find-github-urls
-                         (map (fn [github-url]
-                                (let [re-account-repository-reference
-                                      #"github.com:([^/]+)/([^.?/]+).*\?ref=(.*)"
-
-                                      parts
-                                      (re-find re-account-repository-reference github-url)]
-                                  {:original-github-url github-url
-                                   :account (nth parts 1)
-                                   :repository (nth parts 2)
-                                   :tag (parse-tag (nth parts 3))})))
-                         set)]
-                [terraform-file {:contents contents
+              (let [file-content (slurp terraform-file)
+                    referenced-modules (find-referenced-modules file-content)]
+                [terraform-file {:file-content file-content
                                  :referenced-modules referenced-modules}])))
        (filter #(seq (:referenced-modules (second %))))
        (into {})))
 
-(defn find-available-module-tags
+(defn fetch-available-module-tags-from-github
   "Returns a vector of tag data retrieved from the specified github
   account/repository."
   [{:keys [account repository]}]
@@ -175,37 +177,37 @@
              (map (fn [module-id]
                     (print ".")
                     (flush)
-                    [module-id (find-available-module-tags module-id)]))
+                    [module-id (fetch-available-module-tags-from-github module-id)]))
              (into {}))
 
         tag-selector ({:highest-semver
                        (fn [orig-tag available-tags]
                          (max-tag available-tags))
 
-                       :highest-semver-for-major
+                       :highest-semver-current-major
                        (fn [orig-tag available-tags]
                          (max-tag (:major orig-tag) available-tags))} strategy)]
     (println)
     (println "* patched files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
-      (let [updated-contents (reduce
-                               (fn [acc referenced-module]
-                                 (let [module-id (->module-id referenced-module)
-                                       orig-url (:original-github-url referenced-module)
-                                       orig-url-tag (:tag referenced-module)
-                                       new-url-tag (let [known-tags (module-id->available-tags module-id)]
-                                                     (if (some #(= (:unparsed-tag orig-url-tag) %)
-                                                               (map :unparsed-tag known-tags))
-                                                       (tag-selector orig-url-tag known-tags)
-                                                       orig-url-tag))]
-                                   (str/replace acc
-                                                orig-url
-                                                (str/replace orig-url
-                                                             (:unparsed-tag orig-url-tag)
-                                                             (:unparsed-tag new-url-tag)))))
-                               (:contents contents-and-module-refs)
-                               (:referenced-modules contents-and-module-refs))]
-        (when (not= (:contents contents-and-module-refs) updated-contents)
-          (spit file-path updated-contents)
+      (let [updated-file-content(reduce
+                                  (fn [acc referenced-module]
+                                    (let [module-id (->module-id referenced-module)
+                                          orig-url (:original-github-url referenced-module)
+                                          orig-url-tag (:tag referenced-module)
+                                          new-url-tag (let [known-tags (module-id->available-tags module-id)]
+                                                        (if (some #(= (:unparsed-tag orig-url-tag) %)
+                                                                  (map :unparsed-tag known-tags))
+                                                          (tag-selector orig-url-tag known-tags)
+                                                          orig-url-tag))]
+                                      (str/replace acc
+                                                   orig-url
+                                                   (str/replace orig-url
+                                                                (:unparsed-tag orig-url-tag)
+                                                                (:unparsed-tag new-url-tag)))))
+                                  (:file-content contents-and-module-refs)
+                                  (:referenced-modules contents-and-module-refs))]
+        (when (not= (:file-content contents-and-module-refs) updated-file-content)
+          (spit file-path updated-file-content)
           (println (str "  - " file-path)))))
     (println "* done")))
