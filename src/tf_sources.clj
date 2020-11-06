@@ -51,8 +51,7 @@
 
     (conj without-rc (when-let [rc-str (nth parts 5)]
                        [:rc (Long/parseLong
-                              (nth (re-find #"-rc(\d+)" rc-str)
-                                   1))]))))
+                              (second (re-find #"-rc(\d+)" rc-str)))]))))
 
 (def ->sortable-tag
   "Creates a sortable representation of a parsed tag value."
@@ -106,12 +105,12 @@
                 (let [re-account-repository-reference
                       #"github.com:([^/]+)/([^.?/]+).*\?ref=(.*)"
 
-                      parts
+                      [_ account repository raw-tag]
                       (re-find re-account-repository-reference github-url)]
                   {:original-github-url github-url
-                   :account (nth parts 1)
-                   :repository (nth parts 2)
-                   :tag (parse-tag (nth parts 3))})))
+                   :account account
+                   :repository repository
+                   :tag (parse-tag raw-tag)})))
          set)))
 
 (defn find-terraform-files-with-module-references
@@ -146,6 +145,46 @@
                               "Perhaps the repository doesn't exist, or you don't have access to it. "
                               "This can be related to a wrong or missing GITHUB_TOKEN environment variable."))))))
 
+(defn list-current-sources
+  [{:keys [dir include-file-paths] :or {include-file-paths false}}]
+  (when-not dir
+    (println "please specify the dir option")
+    (System/exit -1))
+
+  (let [dir-path (.getPath (java.io.File. dir))
+        
+        file-path->contents-and-module-refs
+        (find-terraform-files-with-module-references dir)
+
+        module-url->file-paths
+        (reduce
+          (fn [acc [file-path {:keys [referenced-modules]}]]
+            (reduce
+              (fn [acc module]
+                (let [github-url (:original-github-url module)]
+                  (if (contains? acc github-url)
+                    (update acc github-url conj file-path)
+                    (assoc acc github-url [file-path]))))
+              acc
+              referenced-modules))
+          {}
+          file-path->contents-and-module-refs)]
+    (println "current module references, with the files they are referenced from:")
+    (doseq [[module-url file-paths] (into (sorted-map) module-url->file-paths)]
+      (println " + " module-url)
+      (when include-file-paths
+        (doseq [file-path (sort file-paths)]
+          (println "   - " (subs file-path (inc (count dir-path)))))))))
+
+(def strategies
+  {:highest-semver
+   (fn [orig-tag available-tags]
+     (max-tag available-tags))
+
+   :highest-semver-current-major
+   (fn [orig-tag available-tags]
+     (max-tag (:major orig-tag) available-tags))})
+
 (defn update-references
   "Patches all github urls used as sources in .tf files under dir with
   updated tag versions."
@@ -155,7 +194,7 @@
     (println "please specify the dir option")
     (System/exit -1))
 
-  (when-not (#{:highest-semver :highest-semver-current-major} strategy)
+  (when-not ((set (keys strategies)) strategy)
     (println "unkown strategy: " strategy)
     (System/exit -1))
 
@@ -184,15 +223,7 @@
                     (print ".")
                     (flush)
                     [module-id (fetch-available-module-tags-from-github module-id)]))
-             (into {}))
-
-        tag-selector ({:highest-semver
-                       (fn [orig-tag available-tags]
-                         (max-tag available-tags))
-
-                       :highest-semver-current-major
-                       (fn [orig-tag available-tags]
-                         (max-tag (:major orig-tag) available-tags))} strategy)]
+             (into {}))]
     (println)
     (println "* patched files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
@@ -204,7 +235,7 @@
                                           new-url-tag (let [known-tags (module-id->available-tags module-id)]
                                                         (if (some #(= (:unparsed-tag orig-url-tag) %)
                                                                   (map :unparsed-tag known-tags))
-                                                          (tag-selector orig-url-tag known-tags)
+                                                          ((strategies strategy) orig-url-tag known-tags)
                                                           orig-url-tag))]
                                       (str/replace acc
                                                    orig-url

@@ -43,6 +43,19 @@ If the tool receives an error from the github API it will report to
 standard out which account/repository failed, after which execution
 stops.
 
+## Listing current module references
+This operation is save and does not changes files. It also doesn't
+fetch tags from github, but just lists all of the github urls found in
+the relevant terraform files for the target project.
+
+    clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"'
+
+To also see the files that reference the module sources, run the
+command with the :include-file-paths true option, which defaults to
+false.
+
+    clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"' :include-file-paths true
+
 ## Running the updater
 Use the following shell command to update all referenced github urls
 with a tag to the latest tag for the repository.
