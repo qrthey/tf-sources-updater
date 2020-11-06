@@ -48,21 +48,21 @@ This operation is save and does not changes files. It also doesn't
 fetch tags from github, but just lists all of the github urls found in
 the relevant terraform files for the target project.
 
-    clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"'
+    clojure -X tf-sources/list-references :dir '"/path/to/terraform-stack-root"'
 
 To also see the files that reference the module sources, run the
 command with the :include-file-paths true option, which defaults to
 false.
 
-    clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"' :include-file-paths true
+    clojure -X tf-sources/list-references :dir '"/path/to/terraform-stack-root"' :include-file-paths true
 
 Likewise, there is also a :include-proposed-updates flag which will
 query github for available tags and show possible updates.
 
-    clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"' :include-proposed-updates true
+    clojure -X tf-sources/list-references :dir '"/path/to/terraform-stack-root"' :include-proposed-updates true
 
-Both :include-file-paths and :include-proposed-updates can be passed
-together.
+:include-file-paths and :include-proposed-updates can both be passed
+as well.
 
 ## Running the updater
 Use the following shell command to update all referenced github urls
