@@ -56,6 +56,14 @@ false.
 
     clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"' :include-file-paths true
 
+Likewise, there is also a :include-proposed-updates flag which will
+query github for available tags and show possible updates.
+
+    clojure -X tf-sources/list-current-sources :dir '"/path/to/terraform-stack-root"' :include-proposed-updates true
+
+Both :include-file-paths and :include-proposed-updates can be passed
+together.
+
 ## Running the updater
 Use the following shell command to update all referenced github urls
 with a tag to the latest tag for the repository.

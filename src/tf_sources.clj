@@ -145,8 +145,9 @@
                               "Perhaps the repository doesn't exist, or you don't have access to it. "
                               "This can be related to a wrong or missing GITHUB_TOKEN environment variable."))))))
 
-(defn list-current-sources
-  [{:keys [dir include-file-paths] :or {include-file-paths false}}]
+(defn list-references
+  [{:keys [dir include-file-paths include-proposed-updates]
+    :or {include-file-paths false include-proposed-updates false}}]
   (when-not dir
     (println "please specify the dir option")
     (System/exit -1))
@@ -156,25 +157,49 @@
         file-path->contents-and-module-refs
         (find-terraform-files-with-module-references dir)
 
-        module-url->file-paths
+        module->file-paths
         (reduce
           (fn [acc [file-path {:keys [referenced-modules]}]]
             (reduce
               (fn [acc module]
-                (let [github-url (:original-github-url module)]
-                  (if (contains? acc github-url)
-                    (update acc github-url conj file-path)
-                    (assoc acc github-url [file-path]))))
+                (if (contains? acc module)
+                  (update acc module conj file-path)
+                  (assoc acc module [file-path])))
               acc
               referenced-modules))
           {}
           file-path->contents-and-module-refs)]
     (println "current module references, with the files they are referenced from:")
-    (doseq [[module-url file-paths] (into (sorted-map) module-url->file-paths)]
-      (println " + " module-url)
+    (doseq [module (sort-by :original-github-url (keys module->file-paths))]
+      (println " * " (:original-github-url module))
+      (when include-proposed-updates
+        (println "    + update proposals:")
+        (let [known-tags (fetch-available-module-tags-from-github module)
+              current-tag (:unparsed-tag (:tag module))]
+          (if (some #(= current-tag %)
+                    (map :unparsed-tag known-tags))
+            (let [max-current-major (:unparsed-tag (max-tag (:major (:tag module)) known-tags))
+                  max-all (:unparsed-tag (max-tag known-tags))]
+              (cond
+                (= max-all current-tag)
+                (println "      - this module is already at the latest tag.")
+
+                (not= max-current-major current-tag)
+                (do (println (str "      - this module can be updated to " max-current-major
+                                  " which has the same major verion."))
+                    (when (not= max-current-major max-all)
+                      (println (str "      - the module can also be updated to " max-all
+                                    " in which the major verion was bumped!"))))
+
+                :default
+                (println (str "      - the module can be updated to " max-all
+                              " in which the major verion was bumped!"))))
+            (println "      - this module reference does not contain a tag found in github."))))
       (when include-file-paths
-        (doseq [file-path (sort file-paths)]
-          (println "   - " (subs file-path (inc (count dir-path)))))))))
+        (println "    + files containing this module ref:")
+        (doseq [file-path (sort (module->file-paths module))]
+          (println "      - " (subs file-path (inc (count dir-path))))))
+      (println))))
 
 (def strategies
   {:highest-semver
