@@ -145,30 +145,47 @@
                               "Perhaps the repository doesn't exist, or you don't have access to it. "
                               "This can be related to a wrong or missing GITHUB_TOKEN environment variable."))))))
 
+(defn println-err
+  [& vs]
+  (binding [*out* *err*]
+    (apply println vs)))
+
+(defn- fatal
+  [message]
+  (println-err message)
+  (System/exit 1))
+
+(defn- ensure-valid-dir-obj
+  [dir]
+  (when (or (not (string? dir))
+            (= "" dir))
+    (fatal "A directory to analyse must be specified with the :dir option."))
+  (let [dir-obj (java.io.File. dir)]
+    (if (.exists dir-obj)
+      dir-obj
+      (fatal (str "Couldn't find the specified :dir" dir)))))
+
 (defn list-references
   [{:keys [dir include-file-paths include-proposed-updates]
     :or {include-file-paths false include-proposed-updates false}}]
-  (when-not dir
-    (println "please specify the dir option")
-    (System/exit -1))
+  (let [dir-path
+        (.getPath (ensure-valid-dir-obj dir))
 
-  (let [dir-path (.getPath (java.io.File. dir))
-        
         file-path->contents-and-module-refs
         (find-terraform-files-with-module-references dir)
 
         module->file-paths
         (reduce
-          (fn [acc [file-path {:keys [referenced-modules]}]]
-            (reduce
-              (fn [acc module]
-                (if (contains? acc module)
-                  (update acc module conj file-path)
-                  (assoc acc module [file-path])))
-              acc
-              referenced-modules))
-          {}
-          file-path->contents-and-module-refs)]
+         (fn [acc [file-path {:keys [referenced-modules]}]]
+           (reduce
+            (fn [acc module]
+              (if (contains? acc module)
+                (update acc module conj file-path)
+                (assoc acc module [file-path])))
+            acc
+            referenced-modules))
+         {}
+         file-path->contents-and-module-refs)]
     (println "current module references, with the files they are referenced from:")
     (doseq [module (sort-by :original-github-url (keys module->file-paths))]
       (println " * " (:original-github-url module))
@@ -215,9 +232,7 @@
   updated tag versions."
   [{:keys [dir strategy] :or {strategy :highest-semver}}]
 
-  (when-not dir
-    (println "please specify the dir option")
-    (System/exit -1))
+  (ensure-valid-dir-obj dir)
 
   (when-not ((set (keys strategies)) strategy)
     (println "unkown strategy: " strategy)
