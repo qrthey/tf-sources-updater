@@ -1,7 +1,8 @@
 (ns tf-sources
   (:require [clojure.string :as str]
             [cheshire.core :as json]
-            [clj-http.client :as http-client]))
+            [clj-http.client :as http-client])
+  (:import (java.io File)))
 
 (defn parse-tag
   "Tries to parse a tag into an optional prefix string, major, minor and
@@ -75,17 +76,16 @@
 (defn find-relevant-terraform-file-paths
   "Recursively find .tf files that are not hidden, and that are not
   contained under hidden folders."
-  [dir]
-  (let [dir (java.io.File. dir)
-        files (file-seq dir)
+  [^File dir]
+  (let [files (file-seq dir)
         file-paths (set (map #(.getPath %) files))
         hidden-files (filter #(.isHidden %) files)
         hidden-files-paths (set (map #(.getPath %) hidden-files))]
     (filter
-      (fn [path]
-        (and (str/ends-with? path ".tf")
-             (not-any? #(str/starts-with? path %) hidden-files-paths)))
-      file-paths)))
+     (fn [path]
+       (and (str/ends-with? path ".tf")
+            (not-any? #(str/starts-with? path %) hidden-files-paths)))
+     file-paths)))
 
 (defn find-referenced-modules
   "Finds github urls within parenthesis in the file-content, was is a
@@ -116,7 +116,7 @@
 (defn find-terraform-files-with-module-references
   "Returns a map of file-path to maps of file content and referenced
   modules."
-  [dir]
+  [^File dir]
   (->> (find-relevant-terraform-file-paths dir)
        (map (fn [terraform-file]
               (let [file-content (slurp terraform-file)
@@ -160,7 +160,7 @@
   (when (or (not (string? dir))
             (= "" dir))
     (fatal "A directory to analyse must be specified with the :dir option."))
-  (let [dir-obj (java.io.File. dir)]
+  (let [dir-obj (File. dir)]
     (if (.exists dir-obj)
       dir-obj
       (fatal (str "Couldn't find the specified :dir" dir)))))
@@ -168,8 +168,8 @@
 (defn list-references
   [{:keys [dir include-file-paths include-proposed-updates]
     :or {include-file-paths false include-proposed-updates false}}]
-  (let [dir-path
-        (.getPath (ensure-valid-dir-obj dir))
+  (let [dir (ensure-valid-dir-obj dir)
+        dir-path (.getPath dir)
 
         file-path->contents-and-module-refs
         (find-terraform-files-with-module-references dir)
@@ -232,13 +232,13 @@
   updated tag versions."
   [{:keys [dir strategy] :or {strategy :highest-semver}}]
 
-  (ensure-valid-dir-obj dir)
-
   (when-not ((set (keys strategies)) strategy)
     (println "unkown strategy: " strategy)
     (System/exit -1))
 
-  (let [->module-id
+  (let [dir (ensure-valid-dir-obj dir)
+
+        ->module-id
         #(select-keys % [:account :repository])
 
         file-path->contents-and-module-refs
@@ -268,22 +268,22 @@
     (println "* patched files:")
     (doseq [[file-path contents-and-module-refs] file-path->contents-and-module-refs]
       (let [updated-file-content(reduce
-                                  (fn [acc referenced-module]
-                                    (let [module-id (->module-id referenced-module)
-                                          orig-url (:original-github-url referenced-module)
-                                          orig-url-tag (:tag referenced-module)
-                                          new-url-tag (let [known-tags (module-id->available-tags module-id)]
-                                                        (if (some #(= (:unparsed-tag orig-url-tag) %)
-                                                                  (map :unparsed-tag known-tags))
-                                                          ((strategies strategy) orig-url-tag known-tags)
-                                                          orig-url-tag))]
-                                      (str/replace acc
-                                                   orig-url
-                                                   (str/replace orig-url
-                                                                (:unparsed-tag orig-url-tag)
-                                                                (:unparsed-tag new-url-tag)))))
-                                  (:file-content contents-and-module-refs)
-                                  (:referenced-modules contents-and-module-refs))]
+                                 (fn [acc referenced-module]
+                                   (let [module-id (->module-id referenced-module)
+                                         orig-url (:original-github-url referenced-module)
+                                         orig-url-tag (:tag referenced-module)
+                                         new-url-tag (let [known-tags (module-id->available-tags module-id)]
+                                                       (if (some #(= (:unparsed-tag orig-url-tag) %)
+                                                                 (map :unparsed-tag known-tags))
+                                                         ((strategies strategy) orig-url-tag known-tags)
+                                                         orig-url-tag))]
+                                     (str/replace acc
+                                                  orig-url
+                                                  (str/replace orig-url
+                                                               (:unparsed-tag orig-url-tag)
+                                                               (:unparsed-tag new-url-tag)))))
+                                 (:file-content contents-and-module-refs)
+                                 (:referenced-modules contents-and-module-refs))]
         (when (not= (:file-content contents-and-module-refs) updated-file-content)
           (spit file-path updated-file-content)
           (println (str "  - " file-path)))))
