@@ -1,3 +1,16 @@
 {:deps
  {clj-http/clj-http {:mvn/version "3.10.3"}
-  cheshire/cheshire {:mvn/version "5.10.0"}}}
+  cheshire/cheshire {:mvn/version "5.10.0"}}
+
+ :aliases
+ {:check-updates
+  {:exec-fn tf-sources/list-references
+   :exec-args {:include-proposed-updates true
+               :include-file-paths true}}
+
+  :update-same-major
+  {:exec-fn tf-sources/update-references
+   :exec-args {:strategy :highest-semver-current-major}}
+
+  :update-latest
+  {:exec-fn tf-sources/update-references}}}
