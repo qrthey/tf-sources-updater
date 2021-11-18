@@ -186,7 +186,7 @@
             referenced-modules))
          {}
          file-path->contents-and-module-refs)]
-    (println "current module references, with the files they are referenced from:")
+    (println "current module references, with the files they are referenced from:\n")
     (doseq [module (sort-by :original-github-url (keys module->file-paths))]
       (println " * " (:original-github-url module))
       (when include-proposed-updates
